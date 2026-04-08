@@ -483,17 +483,18 @@ export default function App() {
                   </div>
                   {currentRole === "host" && hasVideo && (
                     <div className="player-controls">
-                      <button className="ctrl-btn ctrl-btn--play" onClick={() => void playNow()} disabled={isPlaybackBusy} title="Play in 3s">
-                        <svg viewBox="0 0 24 24" fill="currentColor"><polygon points="5,3 19,12 5,21"/></svg>
-                      </button>
-                      <button className="ctrl-btn ctrl-btn--pause" onClick={() => void pausePlayback()} disabled={isPlaybackBusy} title="Pause">
-                        <svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
-                      </button>
-                      <button className="ctrl-btn ctrl-btn--resume" onClick={() => void resumePlayback()} disabled={isPlaybackBusy} title="Resume in 5s">
-                        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 5V1L7 6l5 5V7c3.31 0 6 2.69 6 6s-2.69 6-6 6-6-2.69-6-6H4c0 4.42 3.58 8 8 8s8-3.58 8-8-3.58-8-8-8z"/></svg>
-                      </button>
-                      <button className="ctrl-btn ctrl-btn--skip" onClick={() => void schedulePlaybackIn(5)} disabled={isPlaybackBusy} title="Schedule +5s"><span>+5s</span></button>
-                      <button className="ctrl-btn ctrl-btn--skip" onClick={() => void schedulePlaybackIn(10)} disabled={isPlaybackBusy} title="Schedule +10s"><span>+10s</span></button>
+                      {/* Smart play/pause toggle */}
+                      {activeSession.playbackState === "playing" ? (
+                        <button className="ctrl-btn ctrl-btn--pause" onClick={() => void pausePlayback()} disabled={isPlaybackBusy} title="Pause">
+                          <svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
+                        </button>
+                      ) : (
+                        <button className="ctrl-btn ctrl-btn--play" onClick={() => void playNow()} disabled={isPlaybackBusy} title="Play">
+                          <svg viewBox="0 0 24 24" fill="currentColor"><polygon points="5,3 19,12 5,21"/></svg>
+                        </button>
+                      )}
+                      <button className="ctrl-btn ctrl-btn--skip" onClick={() => void schedulePlaybackIn(5)} disabled={isPlaybackBusy} title="Schedule in 5s"><span>+5s</span></button>
+                      <button className="ctrl-btn ctrl-btn--skip" onClick={() => void schedulePlaybackIn(10)} disabled={isPlaybackBusy} title="Schedule in 10s"><span>+10s</span></button>
                     </div>
                   )}
                 </section>
