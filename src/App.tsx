@@ -18,7 +18,7 @@ import { buildYouTubeThumbnail, createRoomCode } from "./utils/youtube";
 
 export default function App() {
   const roomChannelRef = useRef<RealtimeChannel | null>(null);
-  const roomRoleRef = useRef<RoomRole>("host");
+  const roomRoleRef = useRef<RoomRole | null>(null);
   const shareTimerRef = useRef<number | null>(null);
   const didCommitPlayRef = useRef<string | null>(null);
   const roomDeletedTimerRef = useRef<number | null>(null);
@@ -92,8 +92,10 @@ export default function App() {
 
   useEffect(() => {
     if (!user || !routeRoomCode || isRoomLoading || currentRoomId) return;
+    // Only auto-join if user was already stored (returning user), not fresh from handleEnter
+    // handleEnter handles the join directly for new users with a room code
     void joinRoomFromRoute(routeRoomCode.toUpperCase());
-  }, [currentRoomId, isRoomLoading, routeRoomCode, user]);
+  }, [user?.id]); // only fire when user ID changes, not on every render
 
   useEffect(() => {
     if (currentRole !== "host" || roomSession.playbackState !== "queued" || !shouldHostPlay) return;
@@ -134,7 +136,10 @@ export default function App() {
     let debounceTimer: number | null = null;
     const debouncedSync = () => {
       if (debounceTimer) window.clearTimeout(debounceTimer);
-      debounceTimer = window.setTimeout(() => void syncRoomState(roomId, roomRoleRef.current).catch(() => null), 100);
+      debounceTimer = window.setTimeout(() => {
+        const role = roomRoleRef.current ?? "listener";
+        void syncRoomState(roomId, role).catch(() => null);
+      }, 100);
     };
     roomChannelRef.current = subscribeToRoom(
       roomId,
