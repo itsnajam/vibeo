@@ -174,6 +174,7 @@ export default function App() {
       setIsRoomLoading(true);
       try {
         const { roomId, role } = await joinRoomByCode(code, newUser);
+        console.log("[vibeo] joined as role:", role, "hostUserId from snapshot will be checked");
         const msgs = await fetchMessages(roomId).catch(() => [] as ChatMessage[]);
         setChatMessages(msgs);
         const snapshot = await fetchRoomSnapshotById(roomId);
