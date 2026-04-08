@@ -68,7 +68,6 @@ export default function App() {
     if (stored) setUser(stored);
     setRouteRoomCode(readRoomCodeFromPath());
     setIsBooting(false);
-
     return () => {
       unsubscribeFromRoom(roomChannelRef.current);
       if (shareTimerRef.current) window.clearTimeout(shareTimerRef.current);
@@ -126,6 +125,8 @@ export default function App() {
   async function refreshMembers(roomId: string) {
     const members = await fetchRoomMembers(roomId).catch(() => [] as RoomMember[]);
     setRoomMembers(members);
+    // Update listener count in session
+    setRoomSession((prev) => prev.roomId ? { ...prev, listenerCount: members.length } : prev);
   }
 
   function connectRoomSubscription(roomId: string) {
@@ -162,6 +163,28 @@ export default function App() {
     setNameError(null);
     const newUser = getOrCreateUser(name);
     setUser(newUser);
+    // If there's a room code in the URL, join immediately with the new user
+    const code = readRoomCodeFromPath();
+    if (code) {
+      setIsRoomLoading(true);
+      try {
+        const { roomId, role } = await joinRoomByCode(code, newUser);
+        const msgs = await fetchMessages(roomId).catch(() => [] as ChatMessage[]);
+        setChatMessages(msgs);
+        const snapshot = await fetchRoomSnapshotById(roomId);
+        setCurrentRoomId(snapshot.roomId);
+        setCurrentRole(role);
+        roomRoleRef.current = role;
+        setRoomSession({ ...snapshot, role, driftMs: 0, shareUrl: buildRoomShareUrl(snapshot.roomCode) });
+        connectRoomSubscription(roomId);
+        await refreshMembers(roomId);
+        navigateToRoom(code);
+        setRouteRoomCode(code);
+      } catch (e) {
+        navigateHome(); setRouteRoomCode(null);
+        setRoomError(friendlyError(e));
+      } finally { setIsRoomLoading(false); }
+    }
   }
 
   // ── Room ──
@@ -314,6 +337,8 @@ export default function App() {
   }
 
   async function leaveSession() {
+    const roomId = currentRoomId;
+    const role = currentRole;
     unsubscribeFromRoom(roomChannelRef.current);
     roomChannelRef.current = null;
     setCurrentRoomId(null); setRoomError(null);
@@ -321,6 +346,7 @@ export default function App() {
     clearUser();
     setUser(null);
     navigateHome(); setRouteRoomCode(null);
+    if (role === "host" && roomId) await deleteRoom(roomId).catch(() => null);
   }
 
   // ── Render ──
@@ -483,18 +509,21 @@ export default function App() {
                   </div>
                   {currentRole === "host" && hasVideo && (
                     <div className="player-controls">
-                      {/* Smart play/pause toggle */}
                       {activeSession.playbackState === "playing" ? (
                         <button className="ctrl-btn ctrl-btn--pause" onClick={() => void pausePlayback()} disabled={isPlaybackBusy} title="Pause">
                           <svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
+                        </button>
+                      ) : activeSession.playbackState === "paused" ? (
+                        <button className="ctrl-btn ctrl-btn--play" onClick={() => void resumePlayback()} disabled={isPlaybackBusy} title="Resume">
+                          <svg viewBox="0 0 24 24" fill="currentColor"><polygon points="5,3 19,12 5,21"/></svg>
                         </button>
                       ) : (
                         <button className="ctrl-btn ctrl-btn--play" onClick={() => void playNow()} disabled={isPlaybackBusy} title="Play">
                           <svg viewBox="0 0 24 24" fill="currentColor"><polygon points="5,3 19,12 5,21"/></svg>
                         </button>
                       )}
-                      <button className="ctrl-btn ctrl-btn--skip" onClick={() => void schedulePlaybackIn(5)} disabled={isPlaybackBusy} title="Schedule in 5s"><span>+5s</span></button>
-                      <button className="ctrl-btn ctrl-btn--skip" onClick={() => void schedulePlaybackIn(10)} disabled={isPlaybackBusy} title="Schedule in 10s"><span>+10s</span></button>
+                      <button className="ctrl-btn ctrl-btn--skip" onClick={() => void schedulePlaybackIn(5)} disabled={isPlaybackBusy} title="+5s"><span>+5s</span></button>
+                      <button className="ctrl-btn ctrl-btn--skip" onClick={() => void schedulePlaybackIn(10)} disabled={isPlaybackBusy} title="+10s"><span>+10s</span></button>
                     </div>
                   )}
                 </section>
