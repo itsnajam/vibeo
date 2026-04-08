@@ -11,9 +11,8 @@ import {
   sendMessage, setRoomPaused, setRoomPlaying, subscribeToRoom,
   unsubscribeFromRoom, updateRoomMedia,
 } from "./lib/rooms";
-import { supabase } from "./lib/supabase";
 import { ChatMessage, PlaybackState, RoomMember, RoomRole, RoomSession, RoomSnapshot, UserProfile } from "./types";
-import { mapSessionToUser, signInAnonymously } from "./utils/auth";
+import { clearUser, getOrCreateUser, loadStoredUser } from "./utils/auth";
 import { friendlyError } from "./utils/errors";
 import { buildYouTubeThumbnail, createRoomCode } from "./utils/youtube";
 
@@ -27,7 +26,6 @@ export default function App() {
   const [user, setUser] = useState<UserProfile | null>(null);
   const [nameInput, setNameInput] = useState("");
   const [nameError, setNameError] = useState<string | null>(null);
-  const [isSigningIn, setIsSigningIn] = useState(false);
   const [roomError, setRoomError] = useState<string | null>(null);
   const [isBooting, setIsBooting] = useState(true);
   const [isRoomLoading, setIsRoomLoading] = useState(false);
@@ -66,20 +64,12 @@ export default function App() {
 
   // ── Bootstrap ──
   useEffect(() => {
-    async function bootstrap() {
-      try {
-        const { data: { session } } = await supabase.auth.getSession();
-        setUser(mapSessionToUser(session));
-        setRouteRoomCode(readRoomCodeFromPath());
-      } catch { /* stay as guest */ }
-      finally { setIsBooting(false); }
-    }
-    void bootstrap();
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_e, session) => {
-      setUser(mapSessionToUser(session));
-    });
+    const stored = loadStoredUser();
+    if (stored) setUser(stored);
+    setRouteRoomCode(readRoomCodeFromPath());
+    setIsBooting(false);
+
     return () => {
-      subscription.unsubscribe();
       unsubscribeFromRoom(roomChannelRef.current);
       if (shareTimerRef.current) window.clearTimeout(shareTimerRef.current);
       if (roomDeletedTimerRef.current) window.clearTimeout(roomDeletedTimerRef.current);
@@ -170,14 +160,8 @@ export default function App() {
     if (!name) { setNameError("Please enter your name to continue."); return; }
     if (name.length < 2) { setNameError("Name must be at least 2 characters."); return; }
     setNameError(null);
-    setIsSigningIn(true);
-    try {
-      await signInAnonymously(name);
-    } catch (e) {
-      setNameError(friendlyError(e));
-    } finally {
-      setIsSigningIn(false);
-    }
+    const newUser = getOrCreateUser(name);
+    setUser(newUser);
   }
 
   // ── Room ──
@@ -330,13 +314,11 @@ export default function App() {
   }
 
   async function leaveSession() {
-    const userId = user?.id;
     unsubscribeFromRoom(roomChannelRef.current);
     roomChannelRef.current = null;
     setCurrentRoomId(null); setRoomError(null);
     setChatMessages([]); setRoomMembers([]);
-    if (userId) { try { await supabase.from("profiles").delete().eq("id", userId); } catch { /* non-fatal */ } }
-    await supabase.auth.signOut();
+    clearUser();
     setUser(null);
     navigateHome(); setRouteRoomCode(null);
   }
@@ -400,8 +382,8 @@ export default function App() {
                 onKeyDown={(e) => e.key === "Enter" && void handleEnter()}
                 maxLength={32}
               />
-              <button className="primary-btn" onClick={() => void handleEnter()} disabled={isSigningIn}>
-                {isSigningIn ? "Just a sec…" : "Let's go →"}
+              <button className="primary-btn" onClick={() => void handleEnter()}>
+                Let's go →
               </button>
               {routeRoomCode && <p className="info-pill">You were invited to room <strong>{routeRoomCode.toUpperCase()}</strong> — enter your name to join.</p>}
               {nameError && <p className="error-text">{nameError}</p>}

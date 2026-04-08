@@ -23,8 +23,8 @@ const ROOM_SELECT = `
 `;
 
 export async function createRoomForHost(user: UserProfile, roomCode: string) {
-  // Sweep stale rooms on creation — free-tier cleanup
   await supabase.rpc("cleanup_stale_rooms").then(() => null, () => null);
+  await ensureProfile(user);
 
   const { data: room, error } = await supabase
     .from("rooms")
@@ -45,6 +45,7 @@ export async function createRoomForHost(user: UserProfile, roomCode: string) {
 }
 
 export async function joinRoomByCode(code: string, user: UserProfile): Promise<{ roomId: string; role: RoomRole }> {
+  await ensureProfile(user);
   const normalizedCode = code.trim().toUpperCase();
   const snapshot = await fetchRoomSnapshotByCode(normalizedCode);
   if (!snapshot) throw new Error("That room was not found.");
@@ -202,6 +203,13 @@ async function upsertPresence(roomId: string, userId: string, role: "host" | "li
     { onConflict: "room_id,user_id" },
   );
   if (error) throw error;
+}
+
+async function ensureProfile(user: UserProfile) {
+  await supabase.from("profiles").upsert(
+    { id: user.id, email: `${user.id}@vibeo.local`, full_name: user.fullName },
+    { onConflict: "id" }
+  ).then(() => null, () => null);
 }
 
 function buildRoomSnapshot(record: RoomRecord): RoomSnapshot {
