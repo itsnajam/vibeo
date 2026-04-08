@@ -8,29 +8,28 @@ type RoomRecord = {
   status: string;
   scheduled_start_at: string | null;
   host_user_id: string;
+  host_name: string | null;
   start_seconds: number | null;
   play_started_at: string | null;
   video_id: string | null;
   video_title: string | null;
   video_artist: string | null;
-  host: Array<{ full_name: string | null }> | null;
 };
 
 const ROOM_SELECT = `
-  id, code, status, scheduled_start_at, host_user_id,
-  start_seconds, play_started_at, video_id, video_title, video_artist,
-  host:profiles!rooms_host_user_id_fkey(full_name)
+  id, code, status, scheduled_start_at, host_user_id, host_name,
+  start_seconds, play_started_at, video_id, video_title, video_artist
 `;
 
 export async function createRoomForHost(user: UserProfile, roomCode: string) {
   await supabase.rpc("cleanup_stale_rooms").then(() => null, () => null);
-  await ensureProfile(user);
 
   const { data: room, error } = await supabase
     .from("rooms")
     .insert({
       code: roomCode,
       host_user_id: user.id,
+      host_name: user.fullName,
       title: `${user.fullName}'s room`,
       status: "waiting",
       start_seconds: 0,
@@ -40,17 +39,16 @@ export async function createRoomForHost(user: UserProfile, roomCode: string) {
 
   if (error || !room) throw error ?? new Error("Could not create room.");
 
-  await upsertPresence(room.id, user.id, "host");
+  await upsertPresence(room.id, user.id, "host", user.fullName);
   return room.id as string;
 }
 
 export async function joinRoomByCode(code: string, user: UserProfile): Promise<{ roomId: string; role: RoomRole }> {
-  await ensureProfile(user);
   const normalizedCode = code.trim().toUpperCase();
   const snapshot = await fetchRoomSnapshotByCode(normalizedCode);
   if (!snapshot) throw new Error("That room was not found.");
   const role: RoomRole = snapshot.hostUserId === user.id ? "host" : "listener";
-  await upsertPresence(snapshot.roomId, user.id, role);
+  await upsertPresence(snapshot.roomId, user.id, role, user.fullName);
   return { roomId: snapshot.roomId, role };
 }
 
@@ -120,7 +118,7 @@ export async function setRoomPaused(args: {
 }
 
 export async function refreshPresence(roomId: string, user: UserProfile, role: "host" | "listener") {
-  await upsertPresence(roomId, user.id, role);
+  await upsertPresence(roomId, user.id, role, user.fullName);
 }
 
 export async function deleteRoom(roomId: string): Promise<void> {
@@ -155,13 +153,13 @@ export function unsubscribeFromRoom(channel: RealtimeChannel | null) {
 export async function fetchRoomMembers(roomId: string): Promise<RoomMember[]> {
   const { data, error } = await supabase
     .from("room_members")
-    .select("user_id, role, profile:profiles!room_members_user_id_fkey(full_name)")
+    .select("user_id, role, display_name")
     .eq("room_id", roomId)
     .is("left_at", null);
   if (error) throw error;
-  return (data ?? []).map((row: { user_id: string; role: string; profile: { full_name: string | null }[] | null }) => ({
+  return (data ?? []).map((row: { user_id: string; role: string; display_name: string | null }) => ({
     userId: row.user_id,
-    displayName: row.profile?.[0]?.full_name ?? "User",
+    displayName: row.display_name ?? "User",
     role: row.role as RoomRole,
   }));
 }
@@ -197,24 +195,15 @@ export async function sendMessage(roomId: string, userId: string, displayName: s
   if (error) throw error;
 }
 
-async function upsertPresence(roomId: string, userId: string, role: "host" | "listener") {
+async function upsertPresence(roomId: string, userId: string, role: "host" | "listener", displayName?: string) {
   const { error } = await supabase.from("room_members").upsert(
-    { room_id: roomId, user_id: userId, role, left_at: null, last_seen_at: new Date().toISOString() },
+    { room_id: roomId, user_id: userId, role, display_name: displayName, left_at: null, last_seen_at: new Date().toISOString() },
     { onConflict: "room_id,user_id" },
   );
   if (error) throw error;
 }
 
-async function ensureProfile(user: UserProfile) {
-  await supabase.from("profiles").upsert(
-    { id: user.id, email: `${user.id}@vibeo.local`, full_name: user.fullName },
-    { onConflict: "id" }
-  ).then(() => null, () => null);
-}
-
 function buildRoomSnapshot(record: RoomRecord): RoomSnapshot {
-  const host = record.host?.[0] ?? null;
-
   let startSeconds = record.start_seconds ?? 0;
   if (record.status === "playing" && record.play_started_at) {
     const elapsedSec = (Date.now() - new Date(record.play_started_at).getTime()) / 1000;
@@ -225,7 +214,7 @@ function buildRoomSnapshot(record: RoomRecord): RoomSnapshot {
     roomId: record.id,
     roomCode: record.code,
     hostUserId: record.host_user_id,
-    hostName: host?.full_name ?? "Host",
+    hostName: record.host_name ?? "Host",
     listenerCount: 0,
     trackTitle: record.video_title ?? "No video selected yet",
     artistName: record.video_artist ?? "",
