@@ -291,20 +291,11 @@ export default function App() {
   async function pausePlayback() {
     if (!user || !currentRoomId || isPlaybackBusy) return;
     setIsPlaybackBusy(true); setRoomError(null);
+    // Optimistic update — reflect paused state immediately
+    setRoomSession((prev) => ({ ...prev, playbackState: "paused", scheduledStartIso: null }));
     try {
       await setRoomPaused({ roomId: currentRoomId, userId: user.id, startSeconds: Math.max(0, Math.floor(hostPlaybackTime)) });
-      await syncRoomState(currentRoomId, "host");
       setManualSeekToken((v) => v + 1);
-    } catch (e) { setRoomError(friendlyError(e)); }
-    finally { setIsPlaybackBusy(false); }
-  }
-
-  async function resumePlayback() {
-    if (!user || !currentRoomId || isPlaybackBusy) return;
-    setIsPlaybackBusy(true); setRoomError(null);
-    try {
-      await scheduleRoomPlayback({ roomId: currentRoomId, userId: user.id, scheduledStartIso: new Date(Date.now() + 5000).toISOString(), startSeconds: Math.max(0, Math.floor(hostPlaybackTime)) });
-      await syncRoomState(currentRoomId, "host");
     } catch (e) { setRoomError(friendlyError(e)); }
     finally { setIsPlaybackBusy(false); }
   }
@@ -312,9 +303,25 @@ export default function App() {
   async function playNow() {
     if (!user || !currentRoomId || isPlaybackBusy) return;
     setIsPlaybackBusy(true); setRoomError(null);
+    const scheduledIso = new Date(Date.now() + 3000).toISOString();
+    const startSecs = Math.max(0, Math.floor(hostPlaybackTime));
+    // Optimistic update
+    setRoomSession((prev) => ({ ...prev, playbackState: "queued", scheduledStartIso: scheduledIso, startSeconds: startSecs }));
     try {
-      await scheduleRoomPlayback({ roomId: currentRoomId, userId: user.id, scheduledStartIso: new Date(Date.now() + 3000).toISOString(), startSeconds: Math.max(0, Math.floor(hostPlaybackTime)) });
-      await syncRoomState(currentRoomId, "host");
+      await scheduleRoomPlayback({ roomId: currentRoomId, userId: user.id, scheduledStartIso: scheduledIso, startSeconds: startSecs });
+    } catch (e) { setRoomError(friendlyError(e)); }
+    finally { setIsPlaybackBusy(false); }
+  }
+
+  async function resumePlayback() {
+    if (!user || !currentRoomId || isPlaybackBusy) return;
+    setIsPlaybackBusy(true); setRoomError(null);
+    const scheduledIso = new Date(Date.now() + 5000).toISOString();
+    const startSecs = Math.max(0, Math.floor(hostPlaybackTime));
+    // Optimistic update
+    setRoomSession((prev) => ({ ...prev, playbackState: "queued", scheduledStartIso: scheduledIso, startSeconds: startSecs }));
+    try {
+      await scheduleRoomPlayback({ roomId: currentRoomId, userId: user.id, scheduledStartIso: scheduledIso, startSeconds: startSecs });
     } catch (e) { setRoomError(friendlyError(e)); }
     finally { setIsPlaybackBusy(false); }
   }
