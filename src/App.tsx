@@ -378,12 +378,12 @@ export default function App() {
         {!user && (
           <div className="auth-page">
             <div className="auth-hero">
-              <h1>Watch together,<br /><span>in sync.</span></h1>
-              <p>Drop a YouTube link, share a room URL, and everyone joins in perfect sync — no account needed.</p>
+              <h1>Watch YouTube<br />together, <span>in sync.</span></h1>
+              <p>The free watch party that needs no account, no extension, no download. Paste a YouTube link, share the room, and everyone watches in perfect sync — instantly.</p>
               <div className="auth-features">
-                <div className="auth-feature"><div className="auth-feature-dot" />No sign up required</div>
-                <div className="auth-feature"><div className="auth-feature-dot" />Frame-accurate playback sync</div>
-                <div className="auth-feature"><div className="auth-feature-dot" />Live chat with everyone in the room</div>
+                <div className="auth-feature"><div className="auth-feature-dot" />No signup — just enter your name</div>
+                <div className="auth-feature"><div className="auth-feature-dot" />Frame-accurate sync across all devices</div>
+                <div className="auth-feature"><div className="auth-feature-dot" />Live chat built right in</div>
               </div>
             </div>
             <div className="auth-card">
