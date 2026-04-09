@@ -48,7 +48,6 @@ export async function joinRoomByCode(code: string, user: UserProfile): Promise<{
   const snapshot = await fetchRoomSnapshotByCode(normalizedCode);
   if (!snapshot) throw new Error("That room was not found.");
   const role: RoomRole = snapshot.hostUserId === user.id ? "host" : "listener";
-  console.log("[vibeo] joinRoomByCode — hostUserId:", snapshot.hostUserId, "userId:", user.id, "role:", role);
   await upsertPresence(snapshot.roomId, user.id, role, user.fullName);
   return { roomId: snapshot.roomId, role };
 }
